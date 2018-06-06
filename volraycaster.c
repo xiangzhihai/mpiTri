@@ -6,6 +6,7 @@
 #include <math.h>
 #include <iostream>
 #include <vector>
+#include <mpi.h>
 //this just used for the simple ray caster that intersects
 //a dense part of the volume and returns that color, rather
 //than accumulating the color properly
@@ -510,6 +511,9 @@ int vrc_render(float *out_rgba)
     //versions of clang support it, i'll have to check and update
     //the code
     //#pragma omp parallel for
+
+    
+
     for (int y = 0; y < camera->frame_py; y++)
     {
         for (int x = 0; x < camera->frame_px; x++)

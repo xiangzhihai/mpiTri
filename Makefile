@@ -1,5 +1,5 @@
 #use g++/cpp so we can use glm
-CC = g++
+CC = mpic++
 #linux
 #GLLIB := -lGL -lGLEW -lGLU -lglut
 #mac
@@ -7,7 +7,7 @@ GLLIB := -framework OpenGL -framework GLUT
 #windows (lookup a glut tutorial???)
 
 #debug
-CCFLAGS := -g
+CCFLAGS := -g -w
 #Optomized
 #note openmp might not work in os x
 #CCFLAGS := -O3 -fopenmp -pthreads

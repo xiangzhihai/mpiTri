@@ -127,8 +127,64 @@ cam_rotate_sphere(CAMERA *cam, glm::vec3 start, glm::vec3 end){
     return;
 }
 
+int send_cam(CAMERA *cam) 
+{
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    for (int i = 1; i < world_size; i++) 
+    {
+        MPI_Send(&cam->eye.x, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->eye.y, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->eye.z, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->dir.x, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->dir.y, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->dir.z, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->up.x, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->up.y, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->up.z, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_u.x, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_u.y, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_u.z, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_v.x, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_v.y, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_v.z, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_w, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_h, 1, MPI_FLOAT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_px, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+        MPI_Send(&cam->frame_py, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+    }
+    return 1;
+}
 
-/****************************************************************************************************
+CAMERA *receive_cam()
+{
+    CAMERA *cam = (CAMERA *)malloc(sizeof(CAMERA));
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+    MPI_Recv(&cam->eye.x, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->eye.y, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->eye.z, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->dir.x, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->dir.y, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->dir.z, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->up.x, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->up.y, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->up.z, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_u.x, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_u.y, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_u.z, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_v.x, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_v.y, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_v.z, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_w, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_h, 1, MPI_FLOAT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_px, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    MPI_Recv(&cam->frame_py, 1, MPI_INT, 0, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+    return cam;
+}
+
+    /****************************************************************************************************
  * The code was developed by Garrett Aldrich for [ECS 277] Advanced Visualization at UC Davis.
  * Bugs and problems :'(
  * If you are in my class, please don't email me.... start a thread on canvas :-)

@@ -2,7 +2,7 @@
 #include "glm/glm.hpp"
 #include "glm/vec3.hpp"
 #include "ray.h"
-
+#include <mpi.h>
 struct CAMERA{
     //all vectors should all be unit length, defines
     //the camera position, direction and orientation
@@ -29,7 +29,8 @@ struct CAMERA{
 
 };
 
-
+int send_cam(CAMERA *cam);
+CAMERA *receive_cam();
 //creates a basic camera pointing in the z direction
 void cam_init(CAMERA *cam, int pixels_x, int pixels_y);
 

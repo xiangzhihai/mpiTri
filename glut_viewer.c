@@ -1,14 +1,16 @@
 #include "glut_viewer.h"
 #include <iostream>
 #include "common.h"
+#include <mpi.h>
 #include "volraycaster.h"
 #define INITAL_DELTA_T .01
 #define INITIAL_MAX_STEPS 1000
 #define INITIAL_MINTRANS .01
-#define INIT_RENDER_RATIO 1
+#define INIT_RENDER_RATIO 0.25
 #define TF_LENGTH 1000
 #define MIN_TF_VAL 0.0
 #define MAX_TF_VAL 1.0
+using namespace std;
 //window title
 const char *win_title = "Garrett's Sample Viewer";
 
@@ -192,23 +194,49 @@ main(int argc, char **argv)
         exit(0);
     }
 
-    //set callback functions for GLUT rendering loop
-    glutDisplayFunc(display);
-    glutReshapeFunc(reshape);
-    glutMouseFunc(mouse);
-    glutMotionFunc(motion);
-    glutKeyboardFunc(key);
-    glutIdleFunc(idle);
+    //mpi
+    MPI_Init(NULL, NULL);
+    // Get the number of processes
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+
+    // Get the rank of the process
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
+
+    int number;
+    if (world_rank == 0)
+    {
+        //set callback functions for GLUT rendering loop
+        glutDisplayFunc(display);
+        glutReshapeFunc(reshape);
+        glutMouseFunc(mouse);
+        glutMotionFunc(motion);
+        glutKeyboardFunc(key);
+        glutIdleFunc(idle);
 
 
-    //starts the main rendering loop
-    glutMainLoop();
+        //starts the main rendering loop
+        glutMainLoop();
+    }
+    else { //host
+        while (true) {
+            CAMERA *cam = receive_cam();
+            cout << cam->eye.x << " " << cam->eye.y << " " << cam->eye.z << endl;
 
+            int res = 20 + world_rank;
+            MPI_Send(&res, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+        }
+    }
     //should free the unused memory and clean
     //data structures but since we are exiting
     //we can be lazy.
+
+    MPI_Finalize();
     return 0;
 }
+
+
 
 void idle(){
     //for now do nothing;
@@ -275,6 +303,35 @@ void render_tex_to_rec(float x0,float y0,float x1,float y1)
 //and draw to the screen
 void display()
 {
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
+    int number;
+    //get camera and light and send to hosts
+    CAMERA *Camera = vrc_camera();
+    VRLIGHT *Light = vrc_light();
+    number = -1;
+    for (int i = 1; i < world_size; i++)
+    {
+        //MPI_Send(&number, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
+        //cout << send_cam(Camera) << endl;
+        send_cam(Camera);
+    }
+
+    for (int i = 1; i < world_size; i++)
+    {
+        MPI_Recv(&number, 1, MPI_INT, i, 0, MPI_COMM_WORLD,
+                 MPI_STATUS_IGNORE);
+        cout << number << endl;
+    }
+
+
+
+
+
+
+
+
+
     //render texture to full screen quad
     glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
     glLoadIdentity();
