@@ -25,7 +25,7 @@ VRVOL *volume = NULL;
 //ray marching
 float dt = .01;
 float maxsteps = 1000;
-int mode = 0;
+int mode = 1;
 //use blinn phong shading to render
 int rendphong = 0;
 float low = 0.0, high = 1.0;
@@ -511,8 +511,12 @@ int vrc_render(float *out_rgba)
     //versions of clang support it, i'll have to check and update
     //the code
     //#pragma omp parallel for
+    int world_size;
+    MPI_Comm_size(MPI_COMM_WORLD, &world_size);
 
-    
+    // Get the rank of the process
+    int world_rank;
+    MPI_Comm_rank(MPI_COMM_WORLD, &world_rank);
 
     for (int y = 0; y < camera->frame_py; y++)
     {
@@ -520,6 +524,9 @@ int vrc_render(float *out_rgba)
         {
             //get inex into output array
             int index = 4 * (x + y * camera->frame_px);
+
+            if ((x + y * camera->frame_px) % world_size != world_rank)
+                continue;
 
             //get ray for this pixel
             //for raycasting we generally use a orthogonal

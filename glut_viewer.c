@@ -3,6 +3,7 @@
 #include "common.h"
 #include <mpi.h>
 #include "volraycaster.h"
+#include <vector>
 #define INITAL_DELTA_T .01
 #define INITIAL_MAX_STEPS 1000
 #define INITIAL_MINTRANS .01
@@ -57,6 +58,45 @@ void checkGL()
     }
 }
 
+int init() 
+{
+    //Initialize the raycaster
+    vrc_setmarch(ray_dt, ray_maxsteps);
+
+    //Initialize camera
+    CAMERA *cam = (CAMERA *)malloc(sizeof(CAMERA));
+    cam_init(cam, win_width * render_ratio, win_height * render_ratio);
+    vrc_setcamera(cam);
+
+    //shouldn't be necesary as init should only be called once,
+    //but just in case
+    if (render_buff)
+        free(render_buff);
+    //allocate rgba floating point framebuffer and intiailize to 0;
+    render_buff = (float *)calloc(vrc_camera()->frame_px * vrc_camera()->frame_py, sizeof(float) * 4);
+    render_width = vrc_camera()->frame_px;
+    render_height = vrc_camera()->frame_py;
+
+    //Initiailize volume
+    VRVOL *vol = readvol_ui8(volfile, volgridx, volgridy, volgridz, voldim);
+    vrc_setvolume(vol);
+
+    //Iintiailize light
+    //position light above the center of the volume
+    VRLIGHT *light = (VRLIGHT *)malloc(sizeof(VRLIGHT));
+    vrl_init(light, (vol->bb_p1 + vol->bb_p0) * .5f + glm::vec3(0, 2.0, 0));
+    vrc_setlight(light);
+
+    //Initialize transfer
+    TFUNC *trans = (TFUNC *)malloc(sizeof(TFUNC));
+    if (!vrt_init(trans, TF_LENGTH, MIN_TF_VAL, MAX_TF_VAL))
+    {
+        EPRINT("ERROR creating transfer functions\n");
+        return 0;
+    }
+    vrc_settransfer(trans);
+    return 0;
+}
 int
 initialize()
 {
@@ -88,40 +128,7 @@ initialize()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,GL_NEAREST);
     glBindTexture(GL_TEXTURE_2D,0);
 
-    //Initialize the raycaster
-    vrc_setmarch(ray_dt,ray_maxsteps);
-
-    //Initialize camera
-    CAMERA *cam = (CAMERA*) malloc(sizeof(CAMERA));
-    cam_init(cam,win_width*render_ratio,win_height*render_ratio);
-    vrc_setcamera(cam);
-
-    //shouldn't be necesary as init should only be called once,
-    //but just in case
-    if(render_buff)free(render_buff);
-    //allocate rgba floating point framebuffer and intiailize to 0;
-    render_buff = (float*)calloc(vrc_camera()->frame_px*vrc_camera()->frame_py,sizeof(float)*4);
-    render_width = vrc_camera()->frame_px;
-    render_height = vrc_camera()->frame_py;
-
-    //Initiailize volume
-    VRVOL *vol = readvol_ui8(volfile,volgridx,volgridy,volgridz,voldim);
-    vrc_setvolume(vol);
-
-    //Iintiailize light
-    //position light above the center of the volume
-    VRLIGHT *light = (VRLIGHT *)malloc(sizeof(VRLIGHT));
-    vrl_init(light,(vol->bb_p1+vol->bb_p0)*.5f+glm::vec3(0,2.0,0));
-    vrc_setlight(light);
-
-    //Initialize transfer
-    TFUNC *trans = (TFUNC *)malloc(sizeof(TFUNC));
-    if(!vrt_init(trans,TF_LENGTH,MIN_TF_VAL,MAX_TF_VAL))
-    {
-        EPRINT("ERROR creating transfer functions\n");
-        return 0;
-    }
-    vrc_settransfer(trans);
+    
 
     //create texture for colormap
     glGenTextures(1,&colormap_tex);
@@ -177,22 +184,13 @@ parse_cmdline(int argc, char **argv)
 int
 main(int argc, char **argv)
 {
-    //Initialize GLUT (extract glut arguments from command line)
-    glutInit(&argc,argv);
-    //Double buffered window, with Red Green Blue Alpha and Depth
-    glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
-    glutInitWindowSize(win_width,win_height);
-    glutCreateWindow(win_title);
-
-    if(!parse_cmdline(argc,argv)){
+    if (!parse_cmdline(argc, argv))
+    {
         EPRINT("Error parsing commandline\n");
         exit(0);
     }
-
-    if(!initialize()){
-        EPRINT("Error initializing volume raycaster");
-        exit(0);
-    }
+    init();
+   
 
     //mpi
     MPI_Init(NULL, NULL);
@@ -207,6 +205,17 @@ main(int argc, char **argv)
     int number;
     if (world_rank == 0)
     {
+        //Initialize GLUT (extract glut arguments from command line)
+        glutInit(&argc, argv);
+        //Double buffered window, with Red Green Blue Alpha and Depth
+        glutInitDisplayMode(GLUT_DOUBLE | GLUT_RGBA | GLUT_DEPTH);
+        glutInitWindowSize(win_width, win_height);
+        glutCreateWindow(win_title);
+        if (!initialize())
+        {
+            EPRINT("Error initializing volume raycaster");
+            exit(0);
+        }
         //set callback functions for GLUT rendering loop
         glutDisplayFunc(display);
         glutReshapeFunc(reshape);
@@ -214,18 +223,32 @@ main(int argc, char **argv)
         glutMotionFunc(motion);
         glutKeyboardFunc(key);
         glutIdleFunc(idle);
-
-
         //starts the main rendering loop
         glutMainLoop();
     }
     else { //host
         while (true) {
             CAMERA *cam = receive_cam();
-            cout << cam->eye.x << " " << cam->eye.y << " " << cam->eye.z << endl;
+            vrc_setcamera(cam);
+            //if (world_rank == 1)
+                //cout << "host: " << world_rank << " x: " << cam->eye.x << " y: " << cam->eye.y << " z: " << cam->eye.z << endl;
+            if (!render_buff)
+            {
+                EPRINT("ERROR: render buffer is NULL\n");
+                exit(0);
+            }
 
-            int res = 20 + world_rank;
-            MPI_Send(&res, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            memset(render_buff, 0, sizeof(float) * 4 * render_width * render_height);
+
+            //render scene
+            if (!vrc_render(render_buff))
+            {
+                EPRINT("Error rendering volume\n");
+                exit(0);
+            }
+
+            //MPI_Send(&world_rank, 1, MPI_INT, 0, 0, MPI_COMM_WORLD);
+            MPI_Send(render_buff, 4 * render_width * render_height, MPI_FLOAT, 0, 0, MPI_COMM_WORLD);
         }
     }
     //should free the unused memory and clean
@@ -310,29 +333,17 @@ void display()
     CAMERA *Camera = vrc_camera();
     VRLIGHT *Light = vrc_light();
     number = -1;
-    for (int i = 1; i < world_size; i++)
+    send_cam(Camera);
+
+
+    float *buffers[world_size];
+    for (int i = 0; i < world_size; i++)
     {
-        //MPI_Send(&number, 1, MPI_INT, i, 0, MPI_COMM_WORLD);
-        //cout << send_cam(Camera) << endl;
-        send_cam(Camera);
+        buffers[i] = (float *)malloc(sizeof(float) * 4 * render_width * render_height);
+        if (i)
+            MPI_Recv(buffers[i], 4 * render_width * render_height, MPI_FLOAT, i, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
     }
 
-    for (int i = 1; i < world_size; i++)
-    {
-        MPI_Recv(&number, 1, MPI_INT, i, 0, MPI_COMM_WORLD,
-                 MPI_STATUS_IGNORE);
-        cout << number << endl;
-    }
-
-
-
-
-
-
-
-
-
-    //render texture to full screen quad
     glClear(GL_DEPTH_BUFFER_BIT|GL_COLOR_BUFFER_BIT);
     glLoadIdentity();
 
@@ -343,20 +354,34 @@ void display()
     }
 
     memset(render_buff,0,sizeof(float)*4*render_width*render_height);
-
+    
     //render scene
-    if(!vrc_render(render_buff))
+    if (!vrc_render(buffers[0]))
     {
         EPRINT("Error rendering volume\n");
         exit(0);
+    }
+
+    for (int y = 0; y < Camera->frame_py; y++)
+    {
+        for (int x = 0; x < Camera->frame_px; x++)
+        {
+            int index = 4 * (x + y * Camera->frame_px);
+
+            int whichHost = (x + y * Camera->frame_px) % world_size;
+            //int offset = render_buff + index;
+
+            if (whichHost)
+                memcpy(buffers[0] + index, buffers[whichHost] + index, sizeof(float) * 4);
+        }
     }
 
     //Enable textures, and copy render buffer to texture
     glEnable (GL_TEXTURE_2D);
     glTexEnvf (GL_TEXTURE_ENV,GL_TEXTURE_ENV_MODE,GL_REPLACE);
     glBindTexture(GL_TEXTURE_2D,render_tex);
-    glTexImage2D(GL_TEXTURE_2D,0,GL_RGBA,render_width,render_height,
-                 0,GL_RGBA,GL_FLOAT,render_buff);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, render_width, render_height,
+                 0, GL_RGBA, GL_FLOAT, buffers[0]);
 
     //render texture to screen
     render_fs_texture();
